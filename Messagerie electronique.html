@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Messagerie Partagée</title>
+    <style>
+      :root {
+        --bg: #111827;
+        --panel: #1f2937;
+        --panel-2: #0f172a;
+        --primary: #60a5fa;
+        --primary-2: #3b82f6;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+        --mine: #2563eb;
+        --other: #374151;
+        --border: rgba(255,255,255,0.08);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: linear-gradient(135deg, #0b1120, #111827 40%, #1e293b);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .app {
+        width: min(100%, 980px);
+        height: min(92vh, 760px);
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+        display: grid;
+        grid-template-rows: 72px 1fr 120px;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        background: rgba(17, 24, 39, 0.9);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .title {
+        font-size: 1.2rem;
+        font-weight: 700;
+      }
+
+      .status {
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      .messages {
+        padding: 20px;
+        overflow-y: auto;
+        background: rgba(15, 23, 42, 0.75);
+      }
+
+      .msg {
+        max-width: 70%;
+        margin-bottom: 14px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        line-height: 1.45;
+        word-wrap: break-word;
+      }
+
+      .msg.me {
+        margin-left: auto;
+        background: linear-gradient(135deg, var(--mine), var(--primary-2));
+        border-bottom-right-radius: 4px;
+      }
+
+      .msg.other {
+        background: var(--other);
+        border-bottom-left-radius: 4px;
+      }
+
+      .meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 0.72rem;
+        color: rgba(255,255,255,0.7);
+        margin-bottom: 6px;
+      }
+
+      .composer {
+        padding: 15px 18px;
+        background: rgba(17, 24, 39, 0.95);
+        border-top: 1px solid var(--border);
+        display: grid;
+        grid-template-columns: 150px 1fr 120px;
+        gap: 12px;
+      }
+
+      input, textarea, button {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: rgba(31, 41, 55, 0.9);
+        color: var(--text);
+        font: inherit;
+      }
+
+      input, textarea {
+        padding: 12px 14px;
+      }
+
+      textarea {
+        min-height: 60px;
+        resize: vertical;
+      }
+
+      button {
+        cursor: pointer;
+        background: linear-gradient(135deg, var(--primary), var(--primary-2));
+        border: none;
+        font-weight: 700;
+        transition: transform 0.15s ease, filter 0.15s ease;
+      }
+
+      button:hover {
+        filter: brightness(1.08);
+        transform: translateY(-1px);
+      }
+
+      @media (max-width: 700px) {
+        .app {
+          height: 100vh;
+          border-radius: 0;
+          width: 100%;
+        }
+
+        .composer {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <div class="header">
+        <div class="title">Messagerie locale</div>
+        <div class="status" id="status">Prêt</div>
+      </div>
+
+      <div id="messages" class="messages" aria-live="polite"></div>
+
+      <div class="composer">
+        <input id="author" type="text" maxlength="30" placeholder="Votre nom" value="Moi" />
+        <textarea id="message" placeholder="Écrivez votre message..."></textarea>
+        <button id="sendBtn">Envoyer</button>
+      </div>
+    </div>
+
+    <script>
+      const messagesEl = document.getElementById('messages');
+      const authorEl = document.getElementById('author');
+      const messageEl = document.getElementById('message');
+      const sendBtn = document.getElementById('sendBtn');
+      const statusEl = document.getElementById('status');
+
+      const STORAGE_KEY = 'shared-messages-v1';
+
+      let messages = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+
+      function renderMessages() {
+        messagesEl.innerHTML = '';
+
+        if (!messages.length) {
+          messagesEl.innerHTML = '<div class="msg other"><div class="meta"><span>Systeme</span><span>Maintenant</span></div>Bienvenue dans la messagerie. Commencez la conversation.</div>';
+          return;
+        }
+
+        messages.forEach((msg) => {
+          const item = document.createElement('div');
+          item.className = 'msg ' + (msg.me ? 'me' : 'other');
+
+          const meta = document.createElement('div');
+          meta.className = 'meta';
+          meta.innerHTML = `<span>${escapeHtml(msg.author)}</span><span>${msg.time}</span>`;
+
+          const text = document.createElement('div');
+          text.textContent = msg.text;
+
+          item.appendChild(meta);
+          item.appendChild(text);
+          messagesEl.appendChild(item);
+        });
+
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function saveMessages() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+      }
+
+      function escapeHtml(str) {
+        return str
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function addMessage(author, text, me = false) {
+        const now = new Date();
+        const item = {
+          author,
+          text,
+          time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          me
+        };
+
+        messages.push(item);
+        saveMessages();
+        renderMessages();
+      }
+
+      function send() {
+        const author = (authorEl.value || 'Moi').trim() || 'Moi';
+        const text = messageEl.value.trim();
+
+        if (!text) {
+          statusEl.textContent = 'Le message est vide';
+          messageEl.focus();
+          return;
+        }
+
+        addMessage(author, text, true);
+        messageEl.value = '';
+        statusEl.textContent = 'Message envoyé';
+      }
+
+      sendBtn.addEventListener('click', send);
+      messageEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          send();
+        }
+      });
+
+      renderMessages();
+      statusEl.textContent = 'En ligne';
+    </script>
+  </body>
+</html>
+
+<!--
+  Exemple d'utilisation :
+  - Enregistre ce fichier en .html sur ton ordinateur.
+  - Ouvre-le dans un navigateur.
+  - Pour qu'un autre appareil puisse le voir, mets-le en ligne via un petit serveur local :
+      python -m http.server 8000
+    puis ouvre l'adresse IP de ton ordinateur depuis l'autre appareil, par exemple :
+      http://192.168.1.20:8000
+  - Si tu veux une vraie messagerie partagée entre plusieurs appareils, il faut un backend (Node.js / PHP / Python Flask / Firebase / Supabase).
+  - Ce fichier est une base simple pour une interface HTML de messagerie.
+-->
